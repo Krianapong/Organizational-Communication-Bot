@@ -41,20 +41,30 @@ namespace Organizational_Communication_Bot.commands
         }
 
         [Command("LeaveSummary")]
-        [Description("สรุปการลาของพนักงานวันนี้")]
-        public async Task LeaveSummary(CommandContext ctx)
+        [Description("สรุปการลาของพนักงานตามเดือนและปีที่กำหนด")]
+        
+        public async Task LeaveSummary(CommandContext ctx, int month, int year)
         {
-            var today = DateTime.Today;
-            var summary = new StringBuilder($"สรุปการลาของพนักงานวันที่ {today.ToShortDateString()}:\n\n");
+            if (month < 1 || month > 12)
+            {
+                await ctx.Channel.SendMessageAsync("เดือนที่ระบุไม่ถูกต้อง");
+                return;
+            }
+
+            var startDate = new DateTime(year, month, 1);
+            var endDate = startDate.AddMonths(1).AddDays(-1); 
+
+            var summary = new StringBuilder($"สรุปการลาของพนักงานเดือน {startDate.Month}/{startDate.Year}:\n\n");
 
             using (SqlConnection connection = new SqlConnection(connectionString))
             {
                 string sql = @"SELECT Username, LeaveType, StartDate, EndDate, Reason 
                                FROM LeaveRequests 
-                               WHERE StartDate = @Today AND EndDate = @Today";
+                               WHERE StartDate >= @StartDate AND EndDate <= @EndDate";
 
                 SqlCommand command = new SqlCommand(sql, connection);
-                command.Parameters.AddWithValue("@Today", today);
+                command.Parameters.AddWithValue("@StartDate", startDate);
+                command.Parameters.AddWithValue("@EndDate", endDate);
 
                 try
                 {
@@ -65,20 +75,20 @@ namespace Organizational_Communication_Bot.commands
                     {
                         string username = reader["Username"].ToString();
                         string leaveType = reader["LeaveType"].ToString();
-                        DateTime startDate = (DateTime)reader["StartDate"];
-                        DateTime endDate = (DateTime)reader["EndDate"];
+                        DateTime startLeaveDate = (DateTime)reader["StartDate"];
+                        DateTime endLeaveDate = (DateTime)reader["EndDate"];
                         string reason = reader["Reason"].ToString();
 
-                        summary.AppendLine($"Username: {username}, Leave Type: {leaveType}, " +
-                                           $"Start Date: {startDate.ToShortDateString()}, End Date: {endDate.ToShortDateString()}, " +
-                                           $"Reason: {reason}");
+                        summary.AppendLine($"Username: {username}, {leaveType}, " +
+                                           $"{startLeaveDate.ToShortDateString()} - {endLeaveDate.ToShortDateString()} " +
+                                           $"{reason}");
                     }
 
                     reader.Close();
 
                     if (summary.Length == 0)
                     {
-                        await ctx.Channel.SendMessageAsync("ไม่มีข้อมูลการลาในวันนี้");
+                        await ctx.Channel.SendMessageAsync("ไม่มีข้อมูลการลาในเดือนและปีที่กำหนด");
                     }
                     else
                     {
