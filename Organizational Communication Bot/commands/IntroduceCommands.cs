@@ -1,18 +1,17 @@
-﻿using DSharpPlus.CommandsNext;
-using DSharpPlus.CommandsNext.Attributes;
+﻿using DSharpPlus.SlashCommands;
 using System;
 using System.Data.SqlClient;
 using System.Threading.Tasks;
 
 namespace Organizational_Communication_Bot.commands
 {
-    internal class IntroduceCommands : BaseCommandModule
+    public class IntroduceCommands : ApplicationCommandModule
     {
         private string connectionString = "Data Source=KIROV\\DATABASE64;Initial Catalog=LeaveRequests;Integrated Security=True;";
 
-        [Command("Introduce")]
-        [Description("แนะนำตัวผู้ใช้")]
-        public async Task Introduce(CommandContext ctx, [RemainingText] string introduction)
+        [SlashCommand("introduce", "แนะนำตัวผู้ใช้")]
+        public async Task Introduce(InteractionContext ctx,
+                                    [Option("introduction", "คำแนะนำตัว")] string introduction)
         {
             using (SqlConnection connection = new SqlConnection(connectionString))
             {
@@ -33,12 +32,12 @@ namespace Organizational_Communication_Bot.commands
                 {
                     await connection.OpenAsync();
                     await command.ExecuteNonQueryAsync();
-                    await ctx.Channel.SendMessageAsync("การแนะนำตัวของคุณถูกบันทึกแล้ว!");
+                    await ctx.CreateResponseAsync("การแนะนำตัวของคุณถูกบันทึกแล้ว!");
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.Message);
-                    await ctx.Channel.SendMessageAsync("เกิดข้อผิดพลาดในการบันทึกข้อมูลการแนะนำตัว");
+                    await ctx.CreateResponseAsync("เกิดข้อผิดพลาดในการบันทึกข้อมูลการแนะนำตัว");
                 }
             }
         }

@@ -1,5 +1,5 @@
 ﻿using DSharpPlus;
-using DSharpPlus.CommandsNext;
+using DSharpPlus.SlashCommands;
 using Organizational_Communication_Bot.commands;
 using Organizational_Communication_Bot.config;
 using System;
@@ -10,8 +10,6 @@ namespace Organizational_Communication_Bot
     internal class Program
     {
         private static DiscordClient Client { get; set; }
-
-        private static CommandsNextExtension Commands { get; set; }
 
         static async Task Main(string[] args)
         {
@@ -30,21 +28,12 @@ namespace Organizational_Communication_Bot
 
             Client.Ready += Client_Ready;
 
-            var commandsConfig = new CommandsNextConfiguration()
-            {
-                StringPrefixes = new string[] { jsonReader.prefix },
-                EnableMentionPrefix = true,
-                EnableDms = true,
-                EnableDefaultHelp = false,
-            };
-
-            Commands = Client.UseCommandsNext(commandsConfig);
-
-            // Registering the commands from separate classes
-            Commands.RegisterCommands<IntroduceCommands>();
-            Commands.RegisterCommands<LeaveRequestCommands>();
-            Commands.RegisterCommands<LeaveSummaryCommands>();
-            Commands.RegisterCommands<HelpCommands>();
+            var slash = Client.UseSlashCommands();
+            slash.RegisterCommands<LeaveRequestCommands>();
+            slash.RegisterCommands<LeaveSummaryCommands>();
+            slash.RegisterCommands<IntroduceCommands>();
+            slash.RegisterCommands<HelpCommands>();
+            slash.RegisterCommands<FileCommands>();
 
             await Client.ConnectAsync();
             await Task.Delay(-1);

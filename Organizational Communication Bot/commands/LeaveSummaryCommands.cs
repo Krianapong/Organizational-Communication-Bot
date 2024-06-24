@@ -1,104 +1,138 @@
-﻿using DSharpPlus.CommandsNext;
-using DSharpPlus.CommandsNext.Attributes;
+﻿using DSharpPlus;
+using DSharpPlus.Entities;
+using DSharpPlus.SlashCommands;
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.SqlClient;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Organizational_Communication_Bot.commands
 {
-    internal class LeaveSummaryCommands : BaseCommandModule
+    public class LeaveSummaryCommands : ApplicationCommandModule
     {
         private string connectionString = "Data Source=KIROV\\DATABASE64;Initial Catalog=LeaveRequests;Integrated Security=True;";
 
-        [Command("LeaveCount")]
-        [Description("แสดงจำนวนครั้งที่ลาด้วยเหตุผลที่กำหนด")]
-        public async Task LeaveCount(CommandContext ctx, string username)
-        {
-            using (SqlConnection connection = new SqlConnection(connectionString))
-            {
-                string sql = @"SELECT COUNT(*) AS RequestCount
-                               FROM LeaveRequests
-                               WHERE Username = @Username";
-
-                SqlCommand command = new SqlCommand(sql, connection);
-                command.Parameters.AddWithValue("@Username", username);
-
-                try
-                {
-                    await connection.OpenAsync();
-                    object result = await command.ExecuteScalarAsync();
-
-                    int count = Convert.ToInt32(result);
-                    await ctx.Channel.SendMessageAsync($"{username} ได้ทำการลาทั้งหมด {count} ครั้ง");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.Message);
-                    await ctx.Channel.SendMessageAsync("เกิดข้อผิดพลาดในการดึงข้อมูล");
-                }
-            }
-        }
-
-        [Command("LeaveSummary")]
-        [Description("สรุปการลาของพนักงานตามเดือนและปีที่กำหนด")]
+        [SlashCommand("leavesummary", "สรุปการลาของพนักงานตามช่วงเวลาที่กำหนด")]
         
-        public async Task LeaveSummary(CommandContext ctx, int month, int year)
+        public async Task LeaveSummary(InteractionContext ctx,
+                                       [Option("month", "เดือน")] long? month = null,
+                                       [Option("year", "ปี")] long? year = null)
         {
-            if (month < 1 || month > 12)
+            DateTime? startDate = null;
+            DateTime? endDate = null;
+
+            // Check if either month or year is specified
+            if (month.HasValue && year.HasValue)
             {
-                await ctx.Channel.SendMessageAsync("เดือนที่ระบุไม่ถูกต้อง");
-                return;
+                // Validate month range (1-12)
+                if (month < 1 || month > 12)
+                {
+                    await ctx.CreateResponseAsync("กรุณาระบุเดือนที่ถูกต้อง (1-12)");
+                    return;
+                }
+
+                startDate = new DateTime((int)year.Value, (int)month.Value, 1);
+                endDate = startDate.Value.AddMonths(1).AddDays(-1);
             }
+            else if (year.HasValue)
+            {
+                startDate = new DateTime((int)year.Value, 1, 1);
+                endDate = new DateTime((int)year.Value, 12, 31);
+            }
+            // No need for else if(month.HasValue) as it will cover if only month is provided
 
-            var startDate = new DateTime(year, month, 1);
-            var endDate = startDate.AddMonths(1).AddDays(-1); 
-
-            var summary = new StringBuilder($"สรุปการลาของพนักงานเดือน {startDate.Month}/{startDate.Year}:\n\n");
+            var summary = new StringBuilder("สรุปการลาของพนักงาน:\n\n");
 
             using (SqlConnection connection = new SqlConnection(connectionString))
             {
-                string sql = @"SELECT Username, LeaveType, StartDate, EndDate, Reason 
-                               FROM LeaveRequests 
-                               WHERE StartDate >= @StartDate AND EndDate <= @EndDate";
+                string sql = "SELECT u.Username, u.Introduction, lr.LeaveType, lr.StartDate, lr.EndDate, lr.Reason " +
+                             "FROM LeaveRequests lr " +
+                             "INNER JOIN Users u ON lr.DiscordUserId = u.DiscordUserId ";
+
+                List<SqlParameter> parameters = new List<SqlParameter>();
+
+                // Check if startDate and endDate are set (i.e., month or year provided)
+                if (startDate.HasValue && endDate.HasValue)
+                {
+                    sql += "WHERE ";
+
+                    // Check if month is specified
+                    if (month.HasValue)
+                    {
+                        sql += "MONTH(CONVERT(datetime, lr.StartDate, 101)) = @Month ";
+                        parameters.Add(new SqlParameter("@Month", month.Value));
+                    }
+
+                    // Check if year is specified
+                    if (year.HasValue)
+                    {
+                        if (month.HasValue)
+                            sql += "AND ";
+
+                        sql += "YEAR(CONVERT(datetime, lr.StartDate, 101)) = @Year ";
+                        parameters.Add(new SqlParameter("@Year", year.Value));
+                    }
+                }
 
                 SqlCommand command = new SqlCommand(sql, connection);
-                command.Parameters.AddWithValue("@StartDate", startDate);
-                command.Parameters.AddWithValue("@EndDate", endDate);
+                command.Parameters.AddRange(parameters.ToArray());
 
                 try
                 {
                     await connection.OpenAsync();
                     SqlDataReader reader = await command.ExecuteReaderAsync();
 
+                    bool hasData = false;
+                    var usersSummary = new Dictionary<string, StringBuilder>();
+
                     while (reader.Read())
                     {
                         string username = reader["Username"].ToString();
+                        string introduction = reader["Introduction"]?.ToString() ?? "ไม่มีการแนะนำตัว";
                         string leaveType = reader["LeaveType"].ToString();
                         DateTime startLeaveDate = (DateTime)reader["StartDate"];
                         DateTime endLeaveDate = (DateTime)reader["EndDate"];
                         string reason = reader["Reason"].ToString();
 
-                        summary.AppendLine($"Username: {username}, {leaveType}, " +
-                                           $"{startLeaveDate.ToShortDateString()} - {endLeaveDate.ToShortDateString()} " +
-                                           $"{reason}");
+                        if (!usersSummary.ContainsKey(username))
+                        {
+                            usersSummary[username] = new StringBuilder($"- Username: {username}\n  Introduction: {introduction}\n");
+                        }
+
+                        usersSummary[username].AppendLine($"  {leaveType}, {startLeaveDate.ToShortDateString()} - {endLeaveDate.ToShortDateString()}\n  เหตุผล: {reason}\n");
+
+                        hasData = true;
                     }
 
                     reader.Close();
 
-                    if (summary.Length == 0)
+                    if (!hasData)
                     {
-                        await ctx.Channel.SendMessageAsync("ไม่มีข้อมูลการลาในเดือนและปีที่กำหนด");
+                        await ctx.CreateResponseAsync("ไม่มีข้อมูลการลาในช่วงเวลาที่กำหนด");
                     }
                     else
                     {
-                        await ctx.Channel.SendMessageAsync(summary.ToString());
+                        foreach (var userSummary in usersSummary.Values)
+                        {
+                            summary.AppendLine(userSummary.ToString());
+                        }
+
+                        var embed = new DiscordEmbedBuilder
+                        {
+                            Title = "สรุปการลาของพนักงาน",
+                            Description = summary.ToString(),
+                            Color = new DiscordColor(0x007FFF) // Azure color
+                        };
+
+                        await ctx.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, new DiscordInteractionResponseBuilder().AddEmbed(embed));
                     }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(ex.Message);
-                    await ctx.Channel.SendMessageAsync("เกิดข้อผิดพลาดในการดึงข้อมูล");
+                    await ctx.CreateResponseAsync("เกิดข้อผิดพลาดในการดึงข้อมูล");
                 }
             }
         }
