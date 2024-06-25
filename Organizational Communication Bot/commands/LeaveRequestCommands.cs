@@ -1,26 +1,70 @@
 ﻿using DSharpPlus;
 using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
+using DSharpPlus.SlashCommands.Attributes;
 using System;
+using System.Collections.Generic;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Organizational_Communication_Bot.commands
 {
-    public enum LeaveType
+    public class LeaveTypeData
     {
-        ลากิจ,
-        ลาป่วย,
-        ลาพักร้อน
+        public int LeaveTypeId { get; set; }
+        public string LeaveTypeName { get; set; }
     }
 
     public class LeaveRequestCommands : ApplicationCommandModule
     {
         private readonly string connectionString = "Data Source=KIROV\\DATABASE64;Initial Catalog=LeaveRequests;Integrated Security=True;";
 
+        // โหลดข้อมูลประเภทการลาจากฐานข้อมูล
+        private async Task<List<LeaveTypeData>> LoadLeaveTypesFromDatabase()
+        {
+            List<LeaveTypeData> leaveTypes = new List<LeaveTypeData>();
+
+            try
+            {
+                using (SqlConnection connection = new SqlConnection(connectionString))
+                {
+                    string sql = "SELECT LeaveTypeId, LeaveTypeName FROM LeaveTypes WHERE IsActive = 1"; // เลือกประเภทการลาที่ IsActive เป็น 1 (active)
+
+                    SqlCommand command = new SqlCommand(sql, connection);
+
+                    await connection.OpenAsync();
+
+                    SqlDataReader reader = await command.ExecuteReaderAsync();
+
+                    while (reader.Read())
+                    {
+                        int leaveTypeId = Convert.ToInt32(reader["LeaveTypeId"]);
+                        string leaveTypeName = reader["LeaveTypeName"].ToString();
+
+                        LeaveTypeData leaveType = new LeaveTypeData
+                        {
+                            LeaveTypeId = leaveTypeId,
+                            LeaveTypeName = leaveTypeName
+                        };
+
+                        leaveTypes.Add(leaveType);
+                    }
+
+                    reader.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading LeaveTypes from database: {ex.Message}");
+            }
+
+            return leaveTypes;
+        }
+
         [SlashCommand("leaverequest", "บันทึกคำขอลา")]
         public async Task LeaveRequest(InteractionContext ctx,
-                                       [Option("ประเภทการลา", "ประเภทการลา")] LeaveType leaveType,
+                                       [ChoiceProvider(typeof(LeaveTypeChoiceProvider))][Option("ประเภทการลา", "ประเภทการลา")] string leaveTypeName,
                                        [Option("เหตุผลการลา", "เหตุผลการลา")] string reason,
                                        [Option("วันที่เริ่มลา", "วันที่เริ่มลา (dd/MM/yyyy)", true)] string startDate = null,
                                        [Option("วันที่สิ้นสุดการลา", "วันที่สิ้นสุดการลา (dd/MM/yyyy)", true)] string endDate = null)
@@ -58,14 +102,26 @@ namespace Organizational_Communication_Bot.commands
             {
                 await EnsureUserExists(ctx.User.Id, ctx.User.Username);
 
+                // โหลดข้อมูลประเภทการลาจากฐานข้อมูล
+                List<LeaveTypeData> leaveTypes = await LoadLeaveTypesFromDatabase();
+
+                // ตรวจสอบว่าประเภทการลาที่ร้องขออยู่ในฐานข้อมูลหรือไม่
+                var selectedLeaveType = leaveTypes.FirstOrDefault(l => l.LeaveTypeName.Equals(leaveTypeName, StringComparison.OrdinalIgnoreCase));
+
+                if (selectedLeaveType == null)
+                {
+                    await ctx.CreateResponseAsync($"ประเภทการลา '{leaveTypeName}' ไม่ถูกต้อง");
+                    return;
+                }
+
                 using (SqlConnection connection = new SqlConnection(connectionString))
                 {
-                    string sql = @"INSERT INTO LeaveRequests (DiscordUserId, LeaveType, StartDate, EndDate, Reason)
-                                   VALUES (@DiscordUserId, @LeaveType, @StartDate, @EndDate, @Reason)";
+                    string sql = @"INSERT INTO LeaveRequests (DiscordUserId, LeaveTypeId, StartDate, EndDate, Reason)
+                               VALUES (@DiscordUserId, @LeaveTypeId, @StartDate, @EndDate, @Reason)";
 
                     SqlCommand command = new SqlCommand(sql, connection);
                     command.Parameters.AddWithValue("@DiscordUserId", (long)ctx.User.Id);
-                    command.Parameters.AddWithValue("@LeaveType", leaveType.ToString());
+                    command.Parameters.AddWithValue("@LeaveTypeId", selectedLeaveType.LeaveTypeId);
                     command.Parameters.AddWithValue("@StartDate", startDateParsed);
                     command.Parameters.AddWithValue("@EndDate", endDateParsed);
                     command.Parameters.AddWithValue("@Reason", reason);
@@ -73,7 +129,7 @@ namespace Organizational_Communication_Bot.commands
                     await connection.OpenAsync();
                     await command.ExecuteNonQueryAsync();
 
-                    await ctx.CreateResponseAsync($"ได้รับคำขอลา {leaveType} จาก {ctx.User.Username} ตั้งแต่ {startDateParsed.ToShortDateString()} ถึง {endDateParsed.ToShortDateString()} ด้วยเหตุผล: {reason}");
+                    await ctx.CreateResponseAsync($"ได้รับคำขอลา '{leaveTypeName}' จาก {ctx.User.Username} ตั้งแต่ {startDateParsed.ToShortDateString()} ถึง {endDateParsed.ToShortDateString()} ด้วยเหตุผล: {reason}");
                 }
             }
             catch (Exception ex)

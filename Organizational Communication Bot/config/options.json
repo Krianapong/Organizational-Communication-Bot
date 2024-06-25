@@ -1,0 +1,22 @@
+﻿{
+  "leavesummary": [
+    {
+      "name": "เดือน",
+      "description": "เดือน",
+      "type": 4,
+      "required": false
+    },
+    {
+      "name": "ปี",
+      "description": "ปี",
+      "type": 4,
+      "required": false
+    },
+    {
+      "name": "ผู้ใช้",
+      "description": "ชื่อผู้ใช้ (เช่น: username#1234)",
+      "type": 3,
+      "required": false
+    }
+  ]
+}
