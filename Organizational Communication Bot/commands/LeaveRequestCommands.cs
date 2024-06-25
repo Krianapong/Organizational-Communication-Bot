@@ -7,33 +7,42 @@ using System.Threading.Tasks;
 
 namespace Organizational_Communication_Bot.commands
 {
+    public enum LeaveType
+    {
+        ลากิจ,
+        ลาป่วย,
+        ลาพักร้อน
+    }
+
     public class LeaveRequestCommands : ApplicationCommandModule
     {
         private readonly string connectionString = "Data Source=KIROV\\DATABASE64;Initial Catalog=LeaveRequests;Integrated Security=True;";
 
         [SlashCommand("leaverequest", "บันทึกคำขอลา")]
         public async Task LeaveRequest(InteractionContext ctx,
-                                       [Option("leavetype", "ประเภทการลา", true)] string leaveType,
-                                       [Option("reason", "เหตุผลการลา", true)] string reason,
-                                       [Option("startdate", "วันที่เริ่มลา (dd/MM/yyyy)", true)] string startDate,
-                                       [Option("enddate", "วันที่สิ้นสุดการลา (dd/MM/yyyy)", true)] string endDate)
+                                       [Option("ประเภทการลา", "ประเภทการลา")] LeaveType leaveType,
+                                       [Option("เหตุผลการลา", "เหตุผลการลา")] string reason,
+                                       [Option("วันที่เริ่มลา", "วันที่เริ่มลา (dd/MM/yyyy)", true)] string startDate = null,
+                                       [Option("วันที่สิ้นสุดการลา", "วันที่สิ้นสุดการลา (dd/MM/yyyy)", true)] string endDate = null)
         {
             DateTime startDateParsed;
             DateTime endDateParsed;
 
-            if (!IsValidLeaveType(leaveType))
+            if (string.IsNullOrEmpty(startDate))
             {
-                await ctx.CreateResponseAsync("ประเภทการลาไม่ถูกต้อง");
-                return;
+                startDateParsed = DateTime.Today;
             }
-
-            if (!DateTime.TryParseExact(startDate, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out startDateParsed))
+            else if (!DateTime.TryParseExact(startDate, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out startDateParsed))
             {
                 await ctx.CreateResponseAsync("รูปแบบวันที่เริ่มลาไม่ถูกต้อง (กรุณาใช้รูปแบบ dd/MM/yyyy)");
                 return;
             }
 
-            if (!DateTime.TryParseExact(endDate, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out endDateParsed))
+            if (string.IsNullOrEmpty(endDate))
+            {
+                endDateParsed = DateTime.Today;
+            }
+            else if (!DateTime.TryParseExact(endDate, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out endDateParsed))
             {
                 await ctx.CreateResponseAsync("รูปแบบวันที่สิ้นสุดการลาไม่ถูกต้อง (กรุณาใช้รูปแบบ dd/MM/yyyy)");
                 return;
@@ -56,7 +65,7 @@ namespace Organizational_Communication_Bot.commands
 
                     SqlCommand command = new SqlCommand(sql, connection);
                     command.Parameters.AddWithValue("@DiscordUserId", (long)ctx.User.Id);
-                    command.Parameters.AddWithValue("@LeaveType", leaveType);
+                    command.Parameters.AddWithValue("@LeaveType", leaveType.ToString());
                     command.Parameters.AddWithValue("@StartDate", startDateParsed);
                     command.Parameters.AddWithValue("@EndDate", endDateParsed);
                     command.Parameters.AddWithValue("@Reason", reason);
@@ -104,13 +113,6 @@ namespace Organizational_Communication_Bot.commands
                     throw;
                 }
             }
-        }
-
-        private bool IsValidLeaveType(string leaveType)
-        {
-            string[] validLeaveTypes = { "ลากิจ", "ลาป่วย" };
-
-            return Array.Exists(validLeaveTypes, type => type.Equals(leaveType, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

@@ -15,8 +15,9 @@ namespace Organizational_Communication_Bot.commands
 
         [SlashCommand("leavesummary", "สรุปการลาของพนักงานตามช่วงเวลาที่กำหนดหรือสำหรับวันปัจจุบัน")]
         public async Task LeaveSummary(InteractionContext ctx,
-                                       [Option("month", "เดือน")] long? month = null,
-                                       [Option("year", "ปี")] long? year = null)
+                                       [Option("เดือน", "เดือน")] long? month = null,
+                                       [Option("ปี", "ปี")] long? year = null,
+                                       [Option("ผู้ใช้", "ชื่อผู้ใช้ (เช่น: username#1234)")] string user = null)
         {
             DateTime? startDate = null;
             DateTime? endDate = null;
@@ -31,8 +32,8 @@ namespace Organizational_Communication_Bot.commands
                              "INNER JOIN Users u ON lr.DiscordUserId = u.DiscordUserId ";
                 List<SqlParameter> parameters = new List<SqlParameter>();
 
-                // Check if either month or year is specified
-                if (month.HasValue || year.HasValue)
+                // Check if either month, year, or user is specified
+                if (month.HasValue || year.HasValue || !string.IsNullOrEmpty(user))
                 {
                     sql += "WHERE ";
 
@@ -56,6 +57,15 @@ namespace Organizational_Communication_Bot.commands
 
                         sql += "YEAR(CONVERT(datetime, lr.StartDate, 101)) = @Year ";
                         parameters.Add(new SqlParameter("@Year", year.Value));
+                    }
+
+                    if (!string.IsNullOrEmpty(user))
+                    {
+                        if (month.HasValue || year.HasValue)
+                            sql += "AND ";
+
+                        sql += "u.Username = @Username ";
+                        parameters.Add(new SqlParameter("@Username", user));
                     }
                 }
                 else
