@@ -3,7 +3,6 @@ using DSharpPlus.Entities;
 using DSharpPlus.SlashCommands;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data.SqlClient;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,34 +13,14 @@ namespace Organizational_Communication_Bot.commands
     {
         private string connectionString = "Data Source=KIROV\\DATABASE64;Initial Catalog=LeaveRequests;Integrated Security=True;";
 
-        [SlashCommand("leavesummary", "สรุปการลาของพนักงานตามช่วงเวลาที่กำหนด")]
-        
+        [SlashCommand("leavesummary", "สรุปการลาของพนักงานตามช่วงเวลาที่กำหนดหรือสำหรับวันปัจจุบัน")]
         public async Task LeaveSummary(InteractionContext ctx,
                                        [Option("month", "เดือน")] long? month = null,
                                        [Option("year", "ปี")] long? year = null)
         {
             DateTime? startDate = null;
             DateTime? endDate = null;
-
-            // Check if either month or year is specified
-            if (month.HasValue && year.HasValue)
-            {
-                // Validate month range (1-12)
-                if (month < 1 || month > 12)
-                {
-                    await ctx.CreateResponseAsync("กรุณาระบุเดือนที่ถูกต้อง (1-12)");
-                    return;
-                }
-
-                startDate = new DateTime((int)year.Value, (int)month.Value, 1);
-                endDate = startDate.Value.AddMonths(1).AddDays(-1);
-            }
-            else if (year.HasValue)
-            {
-                startDate = new DateTime((int)year.Value, 1, 1);
-                endDate = new DateTime((int)year.Value, 12, 31);
-            }
-            // No need for else if(month.HasValue) as it will cover if only month is provided
+            DateTime currentDate = DateTime.Today;
 
             var summary = new StringBuilder("สรุปการลาของพนักงาน:\n\n");
 
@@ -50,22 +29,26 @@ namespace Organizational_Communication_Bot.commands
                 string sql = "SELECT u.Username, u.Introduction, lr.LeaveType, lr.StartDate, lr.EndDate, lr.Reason " +
                              "FROM LeaveRequests lr " +
                              "INNER JOIN Users u ON lr.DiscordUserId = u.DiscordUserId ";
-
                 List<SqlParameter> parameters = new List<SqlParameter>();
 
-                // Check if startDate and endDate are set (i.e., month or year provided)
-                if (startDate.HasValue && endDate.HasValue)
+                // Check if either month or year is specified
+                if (month.HasValue || year.HasValue)
                 {
                     sql += "WHERE ";
 
-                    // Check if month is specified
+                    // Validate month range (1-12)
+                    if (month.HasValue && (month < 1 || month > 12))
+                    {
+                        await ctx.CreateResponseAsync("กรุณาระบุเดือนที่ถูกต้อง (1-12)");
+                        return;
+                    }
+
                     if (month.HasValue)
                     {
                         sql += "MONTH(CONVERT(datetime, lr.StartDate, 101)) = @Month ";
                         parameters.Add(new SqlParameter("@Month", month.Value));
                     }
 
-                    // Check if year is specified
                     if (year.HasValue)
                     {
                         if (month.HasValue)
@@ -74,6 +57,12 @@ namespace Organizational_Communication_Bot.commands
                         sql += "YEAR(CONVERT(datetime, lr.StartDate, 101)) = @Year ";
                         parameters.Add(new SqlParameter("@Year", year.Value));
                     }
+                }
+                else
+                {
+                    // If no month or year specified, use current date
+                    sql += "WHERE CONVERT(date, lr.StartDate) <= @CurrentDate AND CONVERT(date, lr.EndDate) >= @CurrentDate";
+                    parameters.Add(new SqlParameter("@CurrentDate", currentDate));
                 }
 
                 SqlCommand command = new SqlCommand(sql, connection);
