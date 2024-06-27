@@ -18,8 +18,8 @@ namespace Organizational_Communication_Bot.commands
                 var helpMessage = new StringBuilder();
                 helpMessage.AppendLine("คำสั่งที่สามารถใช้ได้:");
 
-                // Replace this with your actual method to retrieve registered commands
-                var registeredCommands = GetRegisteredCommands();
+                // Retrieve registered commands
+                var registeredCommands = await GetRegisteredCommands(ctx.Client, ctx.Guild.Id);
 
                 if (registeredCommands == null || registeredCommands.Count == 0)
                 {
@@ -49,13 +49,19 @@ namespace Organizational_Communication_Bot.commands
             }
         }
 
-        // Method to retrieve registered commands (replace with your actual implementation)
-        private List<DiscordApplicationCommand> GetRegisteredCommands()
+        // Method to retrieve registered commands
+        private async Task<IReadOnlyList<DiscordApplicationCommand>> GetRegisteredCommands(DiscordClient client, ulong guildId)
         {
-            // Implement logic to retrieve registered commands
-            // This could involve accessing your bot's command handler or database
-            // Return a list of DiscordApplicationCommand objects
-            return null; // Replace with your actual logic
+            // Fetch the commands from the Discord client
+            var guildCommands = await client.GetGuildApplicationCommandsAsync(guildId);
+            var globalCommands = await client.GetGlobalApplicationCommandsAsync();
+
+            // Combine the two lists of commands
+            var allCommands = new List<DiscordApplicationCommand>();
+            allCommands.AddRange(guildCommands);
+            allCommands.AddRange(globalCommands);
+
+            return allCommands;
         }
     }
 }
