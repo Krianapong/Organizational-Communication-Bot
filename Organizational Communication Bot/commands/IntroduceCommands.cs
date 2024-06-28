@@ -9,6 +9,11 @@ namespace Organizational_Communication_Bot.commands
     {
         private string connectionString = "Data Source=KIROV\\DATABASE64;Initial Catalog=LeaveRequests;Integrated Security=True;";
 
+        public void WriteName()
+        {
+            System.Console.WriteLine();
+        }
+
         [SlashCommand("introduce", "แนะนำตัวผู้ใช้")]
         public async Task Introduce(InteractionContext ctx,
                                     [Option("introduction", "คำแนะนำตัว")] string introduction)

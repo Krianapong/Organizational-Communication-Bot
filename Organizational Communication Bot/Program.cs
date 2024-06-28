@@ -33,7 +33,7 @@ namespace Organizational_Communication_Bot
             slash.RegisterCommands<LeaveSummaryCommands>();
             slash.RegisterCommands<IntroduceCommands>();
             slash.RegisterCommands<HelpCommands>();
-            slash.RegisterCommands<FileCommands>();
+            slash.RegisterCommands<HolydayCommands>();
 
             await Client.ConnectAsync();
             await Task.Delay(-1);
